@@ -1,39 +1,16 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
-
-const app = express();
-const server = http.createServer(app);
-
-const io = new Server(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] },
-    transports: ['websocket', 'polling'],
-    pingTimeout: 60000,
-    pingInterval: 25000
-});
-
-app.use(express.static(path.join(__dirname, 'public')));
-
-let waitingQueue = [];
-
-function broadcastOnlineCount() {
-    const activeCount = io.sockets.sockets.size;
-    io.emit('update_user_count', activeCount);
+{
+  "name": "random-chat-app",
+  "version": "1.0.0",
+  "description": "Simple Random Chat Application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  }
 }
-
-function removeFromQueue(socketId) {
-    waitingQueue = waitingQueue.filter(id => id !== socketId);
-}
-
-function matchUsers() {
-    waitingQueue = waitingQueue.filter(id => io.sockets.sockets.has(id));
-
-    while (waitingQueue.length >= 2) {
-        const id1 = waitingQueue.shift();
-        const id2 = waitingQueue.shift();
-
-        const socket1 = io.sockets.sockets.get(id1);
         const socket2 = io.sockets.sockets.get(id2);
 
         if (socket1 && socket2) {
