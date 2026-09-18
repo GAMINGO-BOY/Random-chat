@@ -129,6 +129,294 @@
             opacity: 0.5; 
         }
 
+        .icon-btn { 
+            width: 44px; 
+            height: 44px; 
+            border: none; 
+            border-radius: 50%; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            cursor: pointer; 
+            flex-shrink: 0; 
+            transition: transform 0.1s, background-color 0.2s; 
+        }
+
+        .icon-btn:active { 
+            transform: scale(0.92); 
+        }
+
+        .btn-skip { 
+            background-color: #f02849; 
+            color: white; 
+        }
+
+        .btn-send { 
+            background-color: #0084ff; 
+            color: white; 
+        }
+
+        .btn-send:disabled { 
+            background-color: #3a3b3c; 
+            color: #72767d; 
+            cursor: not-allowed; 
+        }
+
+        .icon-btn svg { 
+            width: 20px; 
+            height: 20px; 
+            fill: currentColor; 
+        }
+
+        .searching-overlay { 
+            position: absolute; 
+            top: 50px; 
+            left: 0; 
+            right: 0; 
+            bottom: 64px; 
+            background: #18191a; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            gap: 16px; 
+            z-index: 10; 
+        }
+
+        .spinner { 
+            width: 46px; 
+            height: 46px; 
+            border: 4px solid #3a3b3c; 
+            border-top: 4px solid #0084ff; 
+            border-radius: 50%; 
+            animation: spin 1s linear infinite; 
+        }
+
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+
+        .search-text { font-size: 16px; font-weight: 600; color: #e4e6eb; }
+        .tip-text { font-size: 12px; color: #8a8d91; max-width: 80%; text-align: center; line-height: 1.4; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div class="chat-container">
+        <div class="chat-header">
+            <span>Random Chat</span>
+            <span class="online-count" id="onlineCount">Online: 1</span>
+        </div>
+
+        <div class="searching-overlay" id="searchScreen">
+            <div class="spinner"></div>
+            <div class="search-text" id="searchText">Looking for a stranger...</div>
+            <div class="tip-text">Connecting you to an online user...</div>
+        </div>
+        
+        <div class="chat-box" id="chatBox"></div>
+
+        <div class="typing-indicator" id="typingIndicator"></div>
+
+        <div class="input-area">
+            <button class="icon-btn btn-skip" onclick="nextUser()" title="Skip Stranger">
+                <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+            </button>
+
+            <input type="text" id="messageInput" placeholder="Type a message..." onkeypress="handleKeyPress(event)" oninput="handleTyping()" disabled>
+
+            <button class="icon-btn btn-send" id="sendBtn" onclick="sendMessage()" disabled title="Send Message">
+                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const chatBox = document.getElementById('chatBox');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const onlineCount = document.getElementById('onlineCount');
+        const searchScreen = document.getElementById('searchScreen');
+        const searchText = document.getElementById('searchText');
+
+        let typingTimeout;
+
+        socket.on('update_user_count', (count) => { 
+            onlineCount.innerText = `Online: ${count}`; 
+        });
+
+        socket.on('waiting', (msg) => { 
+            searchScreen.classList.remove('hidden');
+            searchText.innerText = msg;
+            toggleInput(false);
+        });
+
+        socket.on('chat_start', (msg) => { 
+            searchScreen.classList.add('hidden');
+            chatBox.innerHTML = '';
+            appendMessage(msg, 'system-message');
+            toggleInput(true);
+        });
+
+        socket.on('receive_message', (msg) => { 
+            appendMessage(msg, 'stranger-message'); 
+        });
+        
+        socket.on('stranger_left', (msg) => { 
+            appendMessage(msg, 'system-message');
+            typingIndicator.innerText = '';
+            toggleInput(false);
+        });
+
+        socket.on('display_typing', (isTyping) => {
+            typingIndicator.innerText = isTyping ? 'Stranger is typing...' : '';
+        });
+
+        function toggleInput(enable) {
+            messageInput.disabled = !enable;
+            sendBtn.disabled = !enable;
+            if(enable) messageInput.focus();
+        }
+
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (text !== "") {
+                socket.emit('send_message', text);
+                appendMessage(text, 'my-message');
+                messageInput.value = '';
+                socket.emit('typing', false);
+            }
+        }
+
+        function nextUser() {
+            chatBox.innerHTML = '';
+            typingIndicator.innerText = '';
+            searchScreen.classList.remove('hidden');
+            searchText.innerText = "Looking for a new stranger...";
+            toggleInput(false);
+            socket.emit('next_user');
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') sendMessage();
+        }
+
+        function handleTyping() {
+            socket.emit('typing', true);
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => { socket.emit('typing', false); }, 1000);
+        }
+
+        function appendMessage(text, className) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('message', className);
+            msgDiv.innerText = text;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+</body>
+</html>
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            font-weight: 600; 
+            font-size: 16px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3); 
+            z-index: 5; 
+        }
+
+        .online-count { 
+            font-size: 12px; 
+            background: rgba(0,0,0,0.25); 
+            padding: 4px 10px; 
+            border-radius: 12px; 
+        }
+
+        .chat-box { 
+            flex: 1; 
+            padding: 14px; 
+            overflow-y: auto; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px; 
+            -webkit-overflow-scrolling: touch; 
+        }
+
+        .message { 
+            max-width: 80%; 
+            padding: 10px 14px; 
+            border-radius: 18px; 
+            font-size: 15px; 
+            word-wrap: break-word; 
+            line-height: 1.4; 
+        }
+
+        .my-message { 
+            align-self: flex-end; 
+            background-color: #0084ff; 
+            color: white; 
+            border-bottom-right-radius: 4px; 
+        }
+
+        .stranger-message { 
+            align-self: flex-start; 
+            background-color: #3a3b3c; 
+            color: white; 
+            border-bottom-left-radius: 4px; 
+        }
+
+        .system-message { 
+            align-self: center; 
+            background-color: #242526; 
+            color: #ffca28; 
+            font-size: 12px; 
+            padding: 6px 12px; 
+            border-radius: 12px; 
+            text-align: center; 
+            border: 1px solid #3a3b3c; 
+        }
+
+        .typing-indicator { 
+            font-size: 12px; 
+            color: #b0b3b8; 
+            font-style: italic; 
+            height: 18px; 
+            padding-left: 16px; 
+            display: flex; 
+            align-items: center; 
+        }
+
+        .input-area { 
+            display: flex; 
+            padding: 10px 12px; 
+            background-color: #242526; 
+            gap: 8px; 
+            align-items: center; 
+            border-top: 1px solid #3a3b3c; 
+        }
+
+        .input-area input { 
+            flex: 1; 
+            padding: 12px 16px; 
+            border: none; 
+            border-radius: 24px; 
+            background: #3a3b3c; 
+            color: white; 
+            outline: none; 
+            font-size: 15px; 
+        }
+
+        .input-area input:disabled { 
+            background: #18191a; 
+            opacity: 0.5; 
+        }
+
         /* Circular Icon Buttons */
         .icon-btn { 
             width: 44px; 
