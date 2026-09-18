@@ -1,39 +1,82 @@
-{
-  "name": "random-chat-app",
-  "version": "1.0.0",
-  "description": "Simple Random Chat Application",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.7.2"
-  }
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: { origin: "*" }
+});
+
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, 'public')));
+
+let queue = [];
+
+function getOnlineCount() {
+    return io.sockets.sockets.size;
 }
-        const socket2 = io.sockets.sockets.get(id2);
 
-        if (socket1 && socket2) {
-            const room = `room_${id1}_${id2}`;
-            socket1.join(room);
-            socket2.join(room);
+function matchUsers() {
+    while (queue.length >= 2) {
+        const socket1 = queue.shift();
+        const socket2 = queue.shift();
 
-            socket1.room = room;
-            socket2.room = room;
+        if (socket1.connected && socket2.connected) {
+            const roomId = `room_${socket1.id}_${socket2.id}`;
+            socket1.join(roomId);
+            socket2.join(roomId);
 
-            io.to(room).emit('chat_start', 'You are now connected with a stranger!');
-        } else if (socket1) {
-            waitingQueue.unshift(id1);
-        } else if (socket2) {
-            waitingQueue.unshift(id2);
+            socket1.roomId = roomId;
+            socket2.roomId = roomId;
+
+            socket1.emit('partner_found', 'Connected with a random stranger!');
+            socket2.emit('partner_found', 'Connected with a random stranger!');
         }
     }
 }
 
-function leaveRoom(socket) {
-    removeFromQueue(socket.id);
+function disconnectPartner(socket) {
+    if (socket.roomId) {
+        socket.to(socket.roomId).emit('partner_left', 'Stranger has disconnected.');
+        socket.leave(socket.roomId);
+        socket.roomId = null;
+    }
+    queue = queue.filter(s => s.id !== socket.id);
+}
 
-    if (socket.room) {
+io.on('connection', (socket) => {
+    io.emit('online_count', getOnlineCount());
+
+    // Auto add to queue on connection
+    queue.push(socket);
+    socket.emit('waiting', 'Searching for a stranger...');
+    matchUsers();
+
+    socket.on('send_chat', (message) => {
+        if (socket.roomId) {
+            socket.to(socket.roomId).emit('receive_chat', message);
+        }
+    });
+
+    socket.on('skip_chat', () => {
+        disconnectPartner(socket);
+        queue.push(socket);
+        socket.emit('waiting', 'Searching for a new stranger...');
+        matchUsers();
+    });
+
+    socket.on('disconnect', () => {
+        disconnectPartner(socket);
+        io.emit('online_count', getOnlineCount());
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Server started on port ${PORT}`);
+});
         socket.to(socket.room).emit('stranger_left', 'Stranger has left the chat.');
         
         const roomSockets = io.sockets.adapter.rooms.get(socket.room);
