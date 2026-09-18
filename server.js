@@ -7,14 +7,16 @@ const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] }
+    cors: { origin: "*", methods: ["GET", "POST"] },
+    transports: ['websocket', 'polling'],
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 let waitingQueue = [];
 
-// Real-time connected count broadcast karne ka function
 function broadcastOnlineCount() {
     const activeCount = io.sockets.sockets.size;
     io.emit('update_user_count', activeCount);
@@ -25,6 +27,9 @@ function removeFromQueue(socketId) {
 }
 
 function matchUsers() {
+    // Clean up stale or disconnected sockets from queue
+    waitingQueue = waitingQueue.filter(id => io.sockets.sockets.has(id));
+
     while (waitingQueue.length >= 2) {
         const id1 = waitingQueue.shift();
         const id2 = waitingQueue.shift();
@@ -34,6 +39,83 @@ function matchUsers() {
 
         if (socket1 && socket2) {
             const room = `room_${id1}_${id2}`;
+            socket1.join(room);
+            socket2.join(room);
+
+            socket1.room = room;
+            socket2.room = room;
+
+            io.to(room).emit('chat_start', 'You are now connected with a stranger!');
+        } else if (socket1) {
+            waitingQueue.unshift(id1);
+        } else if (socket2) {
+            waitingQueue.unshift(id2);
+        }
+    }
+}
+
+function leaveRoom(socket) {
+    removeFromQueue(socket.id);
+
+    if (socket.room) {
+        socket.to(socket.room).emit('stranger_left', 'Stranger has left the chat.');
+        
+        const roomSockets = io.sockets.adapter.rooms.get(socket.room);
+        if (roomSockets) {
+            for (const socketId of roomSockets) {
+                const clientSocket = io.sockets.sockets.get(socketId);
+                if (clientSocket) {
+                    clientSocket.leave(socket.room);
+                    clientSocket.room = null;
+                }
+            }
+        }
+        socket.room = null;
+    }
+}
+
+io.on('connection', (socket) => {
+    broadcastOnlineCount();
+
+    // Automatically queue the user on connect
+    if (!waitingQueue.includes(socket.id)) {
+        waitingQueue.push(socket.id);
+    }
+    
+    socket.emit('waiting', 'Looking for a stranger...');
+    matchUsers();
+
+    socket.on('send_message', (msg) => {
+        if (socket.room) {
+            socket.to(socket.room).emit('receive_message', msg);
+        }
+    });
+
+    socket.on('typing', (isTyping) => {
+        if (socket.room) {
+            socket.to(socket.room).emit('display_typing', isTyping);
+        }
+    });
+
+    socket.on('next_user', () => {
+        leaveRoom(socket);
+        if (!waitingQueue.includes(socket.id)) {
+            waitingQueue.push(socket.id);
+        }
+        socket.emit('waiting', 'Looking for a new stranger...');
+        matchUsers();
+    });
+
+    socket.on('disconnect', () => {
+        leaveRoom(socket);
+        broadcastOnlineCount();
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
+});
             socket1.join(room);
             socket2.join(room);
 
