@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random Stranger Chat</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 400px;
+            height: 90vh;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background-color: #0084ff;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .chat-box {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 10px 14px;
+            border-radius: 16px;
+            font-size: 14px;
+            word-wrap: break-word;
+        }
+
+        .my-message {
+            align-self: flex-end;
+            background-color: #0084ff;
+            color: white;
+            border-bottom-right-radius: 2px;
+        }
+
+        .stranger-message {
+            align-self: flex-start;
+            background-color: #e4e6eb;
+            color: black;
+            border-bottom-left-radius: 2px;
+        }
+
+        .system-message {
+            align-self: center;
+            background-color: #fff3cd;
+            color: #856404;
+            font-size: 12px;
+            border-radius: 5px;
+            padding: 6px 12px;
+            text-align: center;
+        }
+
+        .input-area {
+            display: flex;
+            padding: 12px;
+            border-top: 1px solid #ddd;
+            background-color: #fff;
+        }
+
+        .input-area input {
+            flex: 1;
+            padding: 10px 15px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            outline: none;
+            font-size: 14px;
+        }
+
+        .input-area button {
+            margin-left: 8px;
+            padding: 10px 16px;
+            background-color: #0084ff;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .input-area button:hover {
+            background-color: #006bce;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chat-container">
+        <div class="chat-header">Random Chat</div>
+        
+        <div class="chat-box" id="chatBox">
+            <div class="message system-message" id="statusMsg">Connecting to server...</div>
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="Message likhein..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <!-- Express Server ke dwara automatic serve hone waali Socket.io script -->
+    <script src="/socket.io/socket.io.js"></script>
+    
+    <script>
+        // Express server se automatic connect hone ke liye empty io()
+        const socket = io();
+
+        const chatBox = document.getElementById('chatBox');
+        const messageInput = document.getElementById('messageInput');
+        const statusMsg = document.getElementById('statusMsg');
+
+        socket.on('connect', () => {
+            statusMsg.innerText = "Server se connect ho gaye! Stranger dhoond rahe hain...";
+        });
+
+        socket.on('waiting', (msg) => {
+            statusMsg.innerText = msg;
+        });
+
+        socket.on('chat_start', (msg) => {
+            appendMessage(msg, 'system-message');
+        });
+
+        socket.on('receive_message', (msg) => {
+            appendMessage(msg, 'stranger-message');
+        });
+
+        socket.on('stranger_left', (msg) => {
+            appendMessage(msg, 'system-message');
+        });
+
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (text !== "") {
+                socket.emit('send_message', text);
+                appendMessage(text, 'my-message');
+                messageInput.value = '';
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function appendMessage(text, className) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('message', className);
+            msgDiv.innerText = text;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+
+</body>
+</html>
